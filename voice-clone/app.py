@@ -8,15 +8,13 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
-from TTS.api import TTS
+from voxcpm import VoxCPM
 
-MODEL = os.getenv("TTS_MODEL", "tts_models/multilingual/multi-dataset/xtts_v2")
-# XTTS-v2 officially supports these 17 languages. Burmese (my) is not supported.
-SUPPORTED = {"en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"}
+MODEL = os.getenv("TTS_MODEL", "openbmb/VoxCPM2")
 MAX_TEXT = 5000
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-app = FastAPI(title="AI Voice Studio Voice Clone API")
+app = FastAPI(title="AI Voice Studio — Burmese Voice Clone API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,14 +23,14 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-tts = None
+model = None
 
 
-def get_tts():
-    global tts
-    if tts is None:
-        tts = TTS(MODEL)
-    return tts
+def get_model():
+    global model
+    if model is None:
+        model = VoxCPM.from_pretrained(MODEL, load_denoiser=False)
+    return model
 
 
 def remove_file(path: str):
@@ -47,7 +45,7 @@ def convert_to_wav(source: str, target: str):
     if not ffmpeg:
         raise RuntimeError("ffmpeg is required on the server")
     result = subprocess.run(
-        [ffmpeg, "-y", "-i", source, "-ar", "22050", "-ac", "1", target],
+        [ffmpeg, "-y", "-i", source, "-ar", "16000", "-ac", "1", target],
         capture_output=True,
         text=True,
     )
@@ -57,24 +55,24 @@ def convert_to_wav(source: str, target: str):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": MODEL, "languages": sorted(SUPPORTED)}
+    return {
+        "ok": True,
+        "model": MODEL,
+        "language": "Burmese (my)",
+        "voice_cloning": True,
+    }
 
 
 @app.post("/clone")
 async def clone(
     text: str = Form(...),
     audio: UploadFile = File(...),
-    language: str = Form("en"),
 ):
     text = text.strip()
-    language = language.strip().lower()
-
     if not text:
         raise HTTPException(400, "Text is required")
     if len(text) > MAX_TEXT:
         raise HTTPException(400, f"Text must be {MAX_TEXT:,} characters or less")
-    if language not in SUPPORTED:
-        raise HTTPException(400, "Unsupported language. XTTS-v2 does not support Burmese (my); use one of the supported language codes.")
 
     suffix = Path(audio.filename or "sample.wav").suffix.lower() or ".wav"
     allowed = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".webm"}
@@ -97,16 +95,23 @@ async def clone(
 
         try:
             convert_to_wav(uploaded, sample)
-            get_tts().tts_to_file(
+            wav = get_model().generate(
                 text=text,
-                speaker_wav=sample,
-                language=language,
-                file_path=output,
+                reference_wav_path=sample,
+                cfg_value=2.0,
+                inference_timesteps=10,
+                max_len=600,
+                normalize=False,
+                denoise=False,
+                retry_badcase=True,
+                retry_badcase_max_times=2,
             )
+            import soundfile as sf
+            sf.write(output, wav, get_model().tts_model.sample_rate)
         except HTTPException:
             raise
         except Exception as exc:
-            raise HTTPException(500, f"Voice cloning failed: {exc}") from exc
+            raise HTTPException(500, f"Burmese voice cloning failed: {exc}") from exc
 
         fd, persistent = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
@@ -116,6 +121,6 @@ async def clone(
     return FileResponse(
         persistent,
         media_type="audio/wav",
-        filename="voice_clone.wav",
+        filename="burmese_voice_clone.wav",
         background=BackgroundTask(remove_file, persistent),
     )
