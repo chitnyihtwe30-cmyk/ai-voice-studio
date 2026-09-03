@@ -1,0 +1,44 @@
+name: Fix language labels
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-labels.yml'
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add language attributes to labels
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          replacements={
+            '<div class="eyebrow">GEMINI AI VOICE STUDIO</div>':'<div class="eyebrow" data-my="GEMINI AI အသံစတူဒီယို" data-en="GEMINI AI VOICE STUDIO">GEMINI AI အသံစတူဒီယို</div>',
+            '<h1>Voice Studio</h1>':'<h1 data-my="အသံစတူဒီယို" data-en="Voice Studio">အသံစတူဒီယို</h1>',
+            '<span class="badge">BURMESE VOICE</span>':'<span class="badge" data-my="မြန်မာအသံ" data-en="BURMESE VOICE">မြန်မာအသံ</span>',
+            '<span>Speed</span>':'<span data-my="အမြန်နှုန်း" data-en="Speed">အမြန်နှုန်း</span>',
+            '<span>Volume</span>':'<span data-my="အသံအတိုးအကျယ်" data-en="Volume">အသံအတိုးအကျယ်</span>',
+            '<span class="ready" id="ready">READY</span>':'<span class="ready" id="ready" data-my="အသင့်" data-en="READY">အသင့်</span>',
+            '<button class="small" id="download" disabled>⇩ Download WAV</button>':'<button class="small" id="download" disabled data-my="⇩ WAV ဒေါင်းလုဒ်" data-en="⇩ Download WAV">⇩ WAV ဒေါင်းလုဒ်</button>',
+            '<label class="label">Gemini API Key</label>':'<label class="label" data-my="Gemini API Key" data-en="Gemini API Key">Gemini API Key</label>',
+            '<button class="small" id="showKey" type="button">Show</button>':'<button class="small" id="showKey" type="button" data-my="ပြမယ်" data-en="Show">ပြမယ်</button>'
+          }
+          for a,b in replacements.items():
+              s=s.replace(a,b)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet || git commit -m 'Fix remaining language labels'
+          git push
