@@ -15,11 +15,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["POST", "GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"]
 )
 
 tts = None
+
 
 def get_tts():
     global tts
@@ -27,18 +28,21 @@ def get_tts():
         tts = TTS(MODEL)
     return tts
 
+
 @app.get("/health")
 def health():
     return {"ok": True, "model": MODEL}
 
+
 @app.post("/clone")
 async def clone(
     text: str = Form(...),
+    audio: UploadFile = File(...),
     language: str = Form("my"),
-    speaker_wav: UploadFile = File(...),
 ):
     text = text.strip()
     language = language.strip().lower()
+
     if not text:
         raise HTTPException(400, "Text is required")
     if len(text) > 5000:
@@ -46,12 +50,18 @@ async def clone(
     if language not in SUPPORTED:
         raise HTTPException(400, "Language must be my or en")
 
-    suffix = Path(speaker_wav.filename or "sample.wav").suffix or ".wav"
+    suffix = Path(audio.filename or "sample.wav").suffix.lower() or ".wav"
+    allowed = {".wav", ".mp3", ".m4a", ".flac", ".ogg"}
+    if suffix not in allowed:
+        raise HTTPException(400, "Unsupported audio format")
+
     with tempfile.TemporaryDirectory() as td:
         sample = os.path.join(td, "sample" + suffix)
         output = os.path.join(td, "voice_clone.wav")
+
         with open(sample, "wb") as f:
-            f.write(await speaker_wav.read())
+            f.write(await audio.read())
+
         try:
             get_tts().tts_to_file(
                 text=text,
@@ -62,8 +72,6 @@ async def clone(
         except Exception as exc:
             raise HTTPException(500, f"Voice cloning failed: {exc}") from exc
 
-        # Return the generated file before the temporary directory is removed.
-        # FastAPI reads the response asynchronously, so copy it to a persistent temp file.
         fd, persistent = tempfile.mkstemp(suffix=".wav")
         os.close(fd)
         with open(output, "rb") as src, open(persistent, "wb") as dst:
@@ -73,5 +81,4 @@ async def clone(
         persistent,
         media_type="audio/wav",
         filename="voice_clone.wav",
-        background=None,
     )
