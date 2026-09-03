@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="my">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Voice Studio — Browser Voice</title>
+<style>
+body{margin:0;background:#080914;color:#fff;font-family:system-ui,sans-serif}.wrap{max-width:850px;margin:auto;padding:20px}.card{background:#121326;border:1px solid #ffffff18;border-radius:22px;padding:22px}textarea,select{width:100%;box-sizing:border-box;background:#080914;color:#fff;border:1px solid #ffffff20;border-radius:14px;padding:14px;margin:8px 0 14px}textarea{min-height:220px}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.btn{border:0;border-radius:14px;padding:13px 18px;font-weight:800;cursor:pointer;margin:4px}.primary{background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff}.secondary{background:#ffffff10;color:#fff;border:1px solid #ffffff18}.status{margin-top:14px;color:#b8bdd8;line-height:1.5}.warn{padding:12px;border-radius:14px;background:#422006;color:#fed7aa;margin-bottom:16px}@media(max-width:700px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main class="wrap"><section class="card">
+<h1>🎙️ Browser Voice</h1>
+<p>GPU / server မလိုဘဲ browser ရဲ့ built-in speech engine ကို အသုံးပြုတဲ့ free fallback ဖြစ်ပါတယ်။</p>
+<div class="warn">⚠️ ဒီ mode က uploaded voice sample ကို clone မလုပ်ပါ။ Browser မှာရရှိတဲ့ voice ကို အသုံးပြုပါတယ်။ တကယ့် voice cloning အတွက် model server လိုအပ်ပါတယ်။</div>
+<label>စာသား</label>
+<textarea id="text" placeholder="ဒီနေရာမှာ စာရေးပါ...">မင်္ဂလာပါ။ AI Voice Studio ကို စမ်းသုံးနေပါတယ်။</textarea>
+<div class="row"><div><label>Voice</label><select id="voice"></select></div><div><label>Language</label><select id="lang"><option value="my-MM">မြန်မာ</option><option value="en-US">English</option></select></div></div>
+<div class="row"><div><label>Speed</label><input id="rate" type="range" min="0.5" max="2" step="0.1" value="1"></div><div><label>Pitch</label><input id="pitch" type="range" min="0" max="2" step="0.1" value="1"></div></div>
+<div><button class="btn primary" id="speak">▶ Speak</button><button class="btn secondary" id="pause">⏸ Pause</button><button class="btn secondary" id="resume">▶ Resume</button><button class="btn secondary" id="stop">■ Stop</button></div>
+<div class="status" id="status">Browser speech engine ကို စစ်နေပါတယ်...</div>
+</section></main>
+<script>
+const $=id=>document.getElementById(id);let voices=[];
+function loadVoices(){voices=speechSynthesis.getVoices();const sel=$('voice');sel.innerHTML='';voices.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.name+' — '+v.lang;sel.appendChild(o)});if(!voices.length)$('status').textContent='ဒီ browser/device မှာ speech voices မရသေးပါ။ Chrome ကို ပြန်ဖွင့်ပြီး စမ်းပါ။';else $('status').textContent=voices.length+' browser voices တွေ့ပါပြီ။';}
+speechSynthesis.onvoiceschanged=loadVoices;loadVoices();
+$('speak').onclick=()=>{const text=$('text').value.trim();if(!text)return $('status').textContent='စာသားထည့်ပါ။';speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);const v=voices[Number($('voice').value)];if(v){u.voice=v;u.lang=v.lang}else u.lang=$('lang').value;u.rate=Number($('rate').value);u.pitch=Number($('pitch').value);u.onstart=()=>$('status').textContent='အသံဖတ်နေပါတယ်...';u.onend=()=>$('status').textContent='ပြီးပါပြီ။';u.onerror=e=>$('status').textContent='Speech error: '+e.error;speechSynthesis.speak(u)};
+$('pause').onclick=()=>speechSynthesis.pause();$('resume').onclick=()=>speechSynthesis.resume();$('stop').onclick=()=>{speechSynthesis.cancel();$('status').textContent='ရပ်လိုက်ပါပြီ။'};
+</script></body></html>
