@@ -1,5 +1,6 @@
-TTS>=0.27.2
+voxcpm>=0.1.0
+soundfile>=0.12.1
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
-torch>=2.2.0
+torch>=2.5.0
