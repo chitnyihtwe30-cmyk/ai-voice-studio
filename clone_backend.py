@@ -1,10 +1,9 @@
-import os
 import tempfile
 from pathlib import Path
 
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from TTS.api import TTS
 
 app = FastAPI(title="AI Voice Studio XTTS Clone Backend")
@@ -16,9 +15,16 @@ print(f"Loading XTTS-v2 on {DEVICE}...")
 tts = TTS(MODEL_NAME).to(DEVICE)
 print("XTTS-v2 ready")
 
+SUPPORTED_LANGUAGES = {
+    "en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl",
+    "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"
+}
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "service": "xtts-v2-clone", "device": DEVICE}
+
 
 @app.post("/clone")
 async def clone(
@@ -29,13 +35,14 @@ async def clone(
     if not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
 
-    # XTTS-v2 supports a fixed set of languages; Burmese (my) is not one of them.
-    supported = {"en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"}
     language = language.lower().strip()
-    if language not in supported:
+    if language not in SUPPORTED_LANGUAGES:
         raise HTTPException(
             status_code=400,
-            detail=f"XTTS-v2 does not support language '{language}'. Supported: {', '.join(sorted(supported))}"
+            detail=(
+                f"XTTS-v2 does not support language '{language}'. "
+                f"Supported: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
+            ),
         )
 
     suffix = Path(file.filename or "sample.wav").suffix or ".wav"
@@ -55,8 +62,11 @@ async def clone(
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"XTTS generation failed: {exc}")
 
-        return FileResponse(
-            path=str(output_path),
-            media_type="audio/wav",
-            filename="cloned-voice.wav",
-        )
+        # Read the generated WAV before TemporaryDirectory is removed.
+        audio = output_path.read_bytes()
+
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={"Content-Disposition": 'inline; filename="cloned-voice.wav"'},
+    )
