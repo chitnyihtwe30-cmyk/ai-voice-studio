@@ -7,11 +7,11 @@ import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from TTS.api import TTS
+from voxcpm import VoxCPM
+import soundfile as sf
 
-app = FastAPI(title="AI Voice Studio XTTS Clone Backend")
+app = FastAPI(title="AI Voice Studio Burmese VoxCPM2 Clone Backend")
 
-# Allow the AI Voice Studio website to call this Colab/cloudflared backend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,30 +20,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+MODEL_NAME = "openbmb/VoxCPM2"
 
-print(f"Loading XTTS-v2 on {DEVICE}...")
-tts = TTS(MODEL_NAME).to(DEVICE)
-print("XTTS-v2 ready")
-
-SUPPORTED_LANGUAGES = {
-    "en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl",
-    "cs", "ar", "zh-cn", "ja", "hu", "ko", "hi"
-}
+print(f"Loading VoxCPM2 on {DEVICE}...")
+model = VoxCPM.from_pretrained(MODEL_NAME, load_denoiser=False)
+print("VoxCPM2 ready - Burmese voice cloning enabled")
 
 
 def convert_to_wav(input_path: Path, output_path: Path) -> None:
-    """Convert an uploaded MP4/audio sample to mono WAV for XTTS."""
-    ffmpeg = "ffmpeg"
-    if os.name == "nt":
-        ffmpeg = "ffmpeg.exe"
-
+    """Convert uploaded MP4/audio to mono 16 kHz WAV for VoxCPM2."""
     result = subprocess.run(
         [
-            ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
             "-i", str(input_path),
-            "-vn", "-ac", "1", "-ar", "22050", "-c:a", "pcm_s16le",
+            "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
             str(output_path),
         ],
         capture_output=True,
@@ -57,11 +48,11 @@ def convert_to_wav(input_path: Path, output_path: Path) -> None:
 def health():
     return {
         "ok": True,
-        "service": "xtts-v2-clone",
+        "service": "voxcpm2-burmese-clone",
         "device": DEVICE,
         "mp4": True,
-        "languages": sorted(SUPPORTED_LANGUAGES),
-        "burmese": False,
+        "burmese": True,
+        "model": MODEL_NAME,
     }
 
 
@@ -71,7 +62,7 @@ async def clone(
     audio: UploadFile | None = File(None),
     sample: UploadFile | None = File(None),
     text: str = Form(...),
-    language: str = Form("en"),
+    language: str = Form("my"),
     speed: str | None = Form(None),
 ):
     incoming = file or audio or sample
@@ -80,17 +71,8 @@ async def clone(
     if not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
 
-    language = language.lower().strip()
-    if language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"XTTS-v2 does not support language '{language}'. "
-                f"Supported: {', '.join(sorted(SUPPORTED_LANGUAGES))}. "
-                "Burmese (my) is not supported by XTTS-v2."
-            ),
-        )
-
+    # VoxCPM2 automatically detects supported languages from the text.
+    # Burmese is supported directly, so no language tag is required.
     original_name = incoming.filename or "sample.wav"
     suffix = Path(original_name).suffix.lower() or ".wav"
 
@@ -102,7 +84,6 @@ async def clone(
         input_path.write_bytes(await incoming.read())
 
         try:
-            # Always normalize the sample. This also makes MP4 uploads work.
             convert_to_wav(input_path, sample_path)
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Audio conversion failed: {exc}")
@@ -110,14 +91,15 @@ async def clone(
         try:
             kwargs = {
                 "text": text.strip(),
-                "speaker_wav": str(sample_path),
-                "language": language,
-                "file_path": str(output_path),
-                "split_sentences": True,
+                "reference_wav_path": str(sample_path),
             }
-            tts.tts_to_file(**kwargs)
+            if speed:
+                kwargs["text"] = f"(speaking speed {speed}){text.strip()}"
+
+            wav = model.generate(**kwargs)
+            sf.write(str(output_path), wav, model.tts_model.sample_rate)
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"XTTS generation failed: {exc}")
+            raise HTTPException(status_code=500, detail=f"VoxCPM2 generation failed: {exc}")
 
         audio_bytes = output_path.read_bytes()
 
