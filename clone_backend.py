@@ -5,10 +5,20 @@ from pathlib import Path
 
 import torch
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from TTS.api import TTS
 
 app = FastAPI(title="AI Voice Studio XTTS Clone Backend")
+
+# Allow the AI Voice Studio website to call this Colab/cloudflared backend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
