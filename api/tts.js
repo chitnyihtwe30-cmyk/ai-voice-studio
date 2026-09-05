@@ -64,7 +64,8 @@ function pcmWav(pcm, sampleRate = 24000, channels = 1, bits = 16) {
 function processPcm(input, speed = 1, volume = 1) {
   const src = Buffer.from(input);
   const rate = Math.max(0.7, Math.min(1.3, Number(speed) || 1));
-  const gain = Math.max(0, Math.min(1, Number(volume) || 0));
+  const volumeNumber = Number(volume);
+  const gain = Math.max(0, Math.min(1, Number.isFinite(volumeNumber) ? volumeNumber : 1));
   const sampleCount = Math.floor(src.length / 2);
   const outCount = Math.max(1, Math.floor(sampleCount / rate));
   const out = Buffer.alloc(outCount * 2);
@@ -94,9 +95,10 @@ function cleanErrorMessage(status, rawMessage) {
 }
 
 async function generateChunk(apiKey, text, voice, style, language) {
-  const languageName = language === 'en' ? 'English' : 'Burmese (Myanmar)';
-  const speechLanguage = language === 'en' ? 'en-US' : 'my-MM';
-  const prompt = `Synthesize speech only. Do not explain anything. Language: ${languageName}. Voice direction: ${style || 'Speak naturally, clearly and warmly.'}\nSpoken transcript:\n${text}`;
+  const isEnglish = language === 'en';
+  const languageName = isEnglish ? 'English' : 'Burmese (Myanmar)';
+  const speechLanguage = isEnglish ? 'en-US' : 'my';
+  const prompt = `Synthesize speech only. Do not explain anything. Language: ${languageName}. Read the transcript exactly in ${languageName}. Voice direction: ${style || 'Speak naturally, clearly and warmly.'}\nSpoken transcript:\n${text}`;
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -112,7 +114,12 @@ async function generateChunk(apiKey, text, voice, style, language) {
           model: MODEL,
           input: prompt,
           response_format: { type: 'audio' },
-          generation_config: { speech_config: [{ voice: voice || 'Kore', language: speechLanguage }] }
+          generation_config: {
+            speech_config: [{
+              voice: voice || 'Kore',
+              language: speechLanguage
+            }]
+          }
         })
       });
 
@@ -154,13 +161,19 @@ export default async function handler(req, res) {
     if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text is required.' });
     if (text.length > MAX_TOTAL_CHARS) return res.status(400).json({ error: `Maximum ${MAX_TOTAL_CHARS.toLocaleString()} characters.` });
 
+    const selectedLanguage = language === 'en' ? 'en' : 'my';
     const chunks = chunkText(text);
     const audioChunks = [];
-    for (const chunk of chunks) audioChunks.push(await generateChunk(apiKey, chunk, voice, style, language));
+    for (const chunk of chunks) {
+      audioChunks.push(await generateChunk(apiKey, chunk, voice, style, selectedLanguage));
+    }
 
     const rawPcm = Buffer.concat(audioChunks.map(b => Buffer.from(b)));
     const processedPcm = processPcm(rawPcm, speed, volume);
     const wav = pcmWav(processedPcm);
+    const volumeNumber = Number(volume);
+    const normalizedVolume = Math.max(0, Math.min(1, Number.isFinite(volumeNumber) ? volumeNumber : 1));
+
     return res.status(200).json({
       mime: 'audio/wav',
       filename: 'gemini-ai-voice.wav',
@@ -168,9 +181,9 @@ export default async function handler(req, res) {
       chunks: chunks.length,
       model: MODEL,
       provider: 'gemini',
-      language: language === 'en' ? 'en-US' : 'my-MM',
+      language: selectedLanguage === 'en' ? 'en-US' : 'my',
       speed: Math.max(0.7, Math.min(1.3, Number(speed) || 1)),
-      volume: Math.max(0, Math.min(1, Number(volume) || 0)),
+      volume: normalizedVolume,
       fallbackAvailable: true
     });
   } catch (e) {
