@@ -1,4 +1,4 @@
-name: Fix language labels
+name: Restore 5000 character TTS limit
 
 on:
   push:
@@ -14,12 +14,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Patch language labels and unlimited TTS UI
+      - name: Restore 5000-character TTS UI
         run: node scripts/patch-unlimited-tts.js
       - name: Commit changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html
-          git diff --cached --quiet || git commit -m 'Enable unlimited-length TTS batching'
+          git diff --cached --quiet || git commit -m 'Restore 5000-character TTS UI limit'
           git push
