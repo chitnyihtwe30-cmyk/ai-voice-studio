@@ -8,7 +8,6 @@ function chunkText(text) {
   let rest = text.trim();
   while (rest.length > MAX_CHARS) {
     let cut = rest.lastIndexOf('။', MAX_CHARS);
-    if (cut < MAX_CHARS * 0.55) cut = rest.lastIndexOf('။', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = rest.lastIndexOf(' ', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = MAX_CHARS;
     chunks.push(rest.slice(0, cut + (rest[cut] === '။' ? 1 : 0)).trim());
@@ -40,8 +39,8 @@ function base64ToBytes(s) {
   return new Uint8Array(Buffer.from(s, 'base64'));
 }
 
-function pcmWav(chunks, sampleRate = 24000, channels = 1, bits = 16) {
-  const dataLen = chunks.reduce((n, b) => n + b.length, 0);
+function pcmWav(pcm, sampleRate = 24000, channels = 1, bits = 16) {
+  const dataLen = pcm.length;
   const out = Buffer.alloc(44 + dataLen);
   let o = 0;
   out.write('RIFF', o); o += 4;
@@ -58,9 +57,22 @@ function pcmWav(chunks, sampleRate = 24000, channels = 1, bits = 16) {
   out.writeUInt16LE(bits, o); o += 2;
   out.write('data', o); o += 4;
   out.writeUInt32LE(dataLen, o); o += 4;
-  for (const b of chunks) {
-    Buffer.from(b).copy(out, o);
-    o += b.length;
+  Buffer.from(pcm).copy(out, o);
+  return out;
+}
+
+function processPcm(input, speed = 1, volume = 1) {
+  const src = Buffer.from(input);
+  const rate = Math.max(0.7, Math.min(1.3, Number(speed) || 1));
+  const gain = Math.max(0, Math.min(1, Number(volume) || 0));
+  const sampleCount = Math.floor(src.length / 2);
+  const outCount = Math.max(1, Math.floor(sampleCount / rate));
+  const out = Buffer.alloc(outCount * 2);
+  for (let i = 0; i < outCount; i++) {
+    const pos = Math.min(sampleCount - 1, Math.floor(i * rate));
+    const sample = src.readInt16LE(pos * 2);
+    const scaled = Math.max(-32768, Math.min(32767, Math.round(sample * gain)));
+    out.writeInt16LE(scaled, i * 2);
   }
   return out;
 }
@@ -75,20 +87,15 @@ function sleep(ms) {
 
 function cleanErrorMessage(status, rawMessage) {
   const message = String(rawMessage || '').trim();
-  if (status === 429) {
-    return 'Gemini AI Voice limit ရောက်နေပါတယ်။ ခဏစောင့်ပြီး ထပ်စမ်းပါ။ မကြာခဏဖြစ်ရင် Gemini API quota/billing ကို စစ်ပါ။';
-  }
-  if (status === 401 || status === 403) {
-    return 'Gemini API Key / project permission ပြဿနာရှိပါတယ်။ Server-side GEMINI_API_KEY ကို စစ်ပါ။';
-  }
-  if (status === 400) {
-    return message || 'Gemini request မမှန်ကန်ပါ။ Voice / text / style ကို စစ်ပါ။';
-  }
+  if (status === 429) return 'Gemini AI Voice limit ရောက်နေပါတယ်။ ခဏစောင့်ပြီး ထပ်စမ်းပါ။ မကြာခဏဖြစ်ရင် Gemini API quota/billing ကို စစ်ပါ။';
+  if (status === 401 || status === 403) return 'Gemini API Key / project permission ပြဿနာရှိပါတယ်။ Server-side GEMINI_API_KEY ကို စစ်ပါ။';
+  if (status === 400) return message || 'Gemini request မမှန်ကန်ပါ။ Voice / text / style ကို စစ်ပါ။';
   return message || `Gemini API error ${status}`;
 }
 
 async function generateChunk(apiKey, text, voice, style, language) {
   const languageName = language === 'en' ? 'English' : 'Burmese (Myanmar)';
+  const speechLanguage = language === 'en' ? 'en-US' : 'my-MM';
   const prompt = `Synthesize speech only. Do not explain anything. Language: ${languageName}. Voice direction: ${style || 'Speak naturally, clearly and warmly.'}\nSpoken transcript:\n${text}`;
   let lastError = null;
 
@@ -105,7 +112,7 @@ async function generateChunk(apiKey, text, voice, style, language) {
           model: MODEL,
           input: prompt,
           response_format: { type: 'audio' },
-          generation_config: { speech_config: [{ voice: voice || 'Kore' }] }
+          generation_config: { speech_config: [{ voice: voice || 'Kore', language: speechLanguage }] }
         })
       });
 
@@ -121,7 +128,6 @@ async function generateChunk(apiKey, text, voice, style, language) {
       error.status = r.status;
       error.rawMessage = rawMessage;
       lastError = error;
-
       if (!isRetryableStatus(r.status) || attempt === MAX_RETRIES) throw error;
       await sleep(1000 * attempt);
     } catch (e) {
@@ -130,7 +136,6 @@ async function generateChunk(apiKey, text, voice, style, language) {
       await sleep(1000 * attempt);
     }
   }
-
   throw lastError || new Error('Gemini TTS generation failed');
 }
 
@@ -143,26 +148,19 @@ export default async function handler(req, res) {
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
-    }
+    if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
 
-    const { text, voice, style, language } = req.body || {};
-    if (!text || typeof text !== 'string') {
-      return res.status(400).json({ error: 'Text is required.' });
-    }
-    if (text.length > MAX_TOTAL_CHARS) {
-      return res.status(400).json({ error: `Maximum ${MAX_TOTAL_CHARS.toLocaleString()} characters.` });
-    }
+    const { text, voice, style, language, speed, volume } = req.body || {};
+    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text is required.' });
+    if (text.length > MAX_TOTAL_CHARS) return res.status(400).json({ error: `Maximum ${MAX_TOTAL_CHARS.toLocaleString()} characters.` });
 
     const chunks = chunkText(text);
     const audioChunks = [];
+    for (const chunk of chunks) audioChunks.push(await generateChunk(apiKey, chunk, voice, style, language));
 
-    for (const chunk of chunks) {
-      audioChunks.push(await generateChunk(apiKey, chunk, voice, style, language));
-    }
-
-    const wav = pcmWav(audioChunks);
+    const rawPcm = Buffer.concat(audioChunks.map(b => Buffer.from(b)));
+    const processedPcm = processPcm(rawPcm, speed, volume);
+    const wav = pcmWav(processedPcm);
     return res.status(200).json({
       mime: 'audio/wav',
       filename: 'gemini-ai-voice.wav',
@@ -170,6 +168,9 @@ export default async function handler(req, res) {
       chunks: chunks.length,
       model: MODEL,
       provider: 'gemini',
+      language: language === 'en' ? 'en-US' : 'my-MM',
+      speed: Math.max(0.7, Math.min(1.3, Number(speed) || 1)),
+      volume: Math.max(0, Math.min(1, Number(volume) || 0)),
       fallbackAvailable: true
     });
   } catch (e) {
