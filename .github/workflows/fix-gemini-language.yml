@@ -2,7 +2,8 @@ name: Fix Gemini Language UI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -13,131 +14,85 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch language and unlimited-length TTS UI
+      - name: Patch unlimited TTS UI
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
           changed = False
-
-          # Remove the old 5,000-character UI restriction.
-          replacements = {
-              '5,000 characters အထိ အသုံးပြုနိုင်ပါတယ်။': 'စာဘယ်လောက်ရှည်ရှည် ထုတ်နိုင်ပါတယ်။',
-              '0 / 5,000': '0 characters',
-              'maxlength="5000"': '',
-          }
-          for old, new in replacements.items():
+          for old, new in [
+              ('5,000 characters အထိ အသုံးပြုနိုင်ပါတယ်။', 'စာဘယ်လောက်ရှည်ရှည် ထုတ်နိုင်ပါတယ်။'),
+              ('0 / 5,000', '0 characters'),
+              ('maxlength="5000"', ''),
+          ]:
               if old in s:
                   s = s.replace(old, new)
                   changed = True
 
           marker = '<!-- UNLIMITED-TTS-V1 -->'
           if marker not in s:
-              patch = r'''<!-- UNLIMITED-TTS-V1 -->
-<script>
-(function(){
-  let controller = null;
-  const CHUNK = 2400;
-  const $ = id => document.getElementById(id);
-
-  function splitText(text){
-    const out=[]; let rest=text.trim();
-    while(rest.length>CHUNK){
-      let cut=rest.lastIndexOf('။',CHUNK);
-      if(cut<CHUNK*0.55) cut=rest.lastIndexOf(' ',CHUNK);
-      if(cut<CHUNK*0.55) cut=CHUNK;
-      const end=cut+(rest[cut]==='။'?1:0);
-      out.push(rest.slice(0,end).trim()); rest=rest.slice(end).trim();
-    }
-    if(rest) out.push(rest); return out;
-  }
-
-  function b64(s){
-    const bin=atob(s), a=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a;
-  }
-
-  function makeWav(parts){
-    const dataLen=parts.reduce((n,p)=>n+p.length,0), out=new Uint8Array(44+dataLen);
-    const v=new DataView(out.buffer), enc=new TextEncoder(); out.set(enc.encode('RIFF'),0);
-    v.setUint32(4,36+dataLen,true); out.set(enc.encode('WAVE'),8); out.set(enc.encode('fmt '),12);
-    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
-    v.setUint32(24,24000,true); v.setUint32(28,48000,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
-    out.set(enc.encode('data'),36); v.setUint32(40,dataLen,true);
-    let pos=44; for(const p of parts){ out.set(p,pos); pos+=p.length; }
-    return out;
-  }
-
-  async function generateUnlimited(){
-    const text=($('text')?.value||'').trim();
-    if(!text) return;
-    const button=$('generate'), status=$('status'), audio=$('audio'), download=$('download');
-    const endpoint=($('ttsEndpoint')?.value||'/api/tts').trim()||'/api/tts';
-    const chunks=splitText(text); const pcm=[];
-    controller=new AbortController();
-    if(button){button.disabled=true; button.dataset.unlimitedBusy='1';}
-    if(status) status.textContent=`AI Voice ထုတ်နေပါတယ်… 0 / ${chunks.length} parts`;
-    try{
-      for(let i=0;i<chunks.length;i++){
-        if(controller.signal.aborted) throw new DOMException('Stopped','AbortError');
-        const body={
-          text:chunks[i], voice:$('voice')?.value||'Kore', style:$('style')?.value||'',
-          language:window.currentLang||document.documentElement.lang||'my',
-          speed:Number($('speed')?.value||1), volume:Number($('volume')?.value||1)
-        };
-        const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-        const data=await r.json().catch(()=>({}));
-        if(!r.ok) throw new Error(data.error||`TTS error ${r.status}`);
-        const wav=b64(data.audio||'');
-        if(wav.length<=44) throw new Error('AI Voice returned empty audio');
-        pcm.push(wav.slice(44));
-        if(status) status.textContent=`AI Voice ထုတ်နေပါတယ်… ${i+1} / ${chunks.length} parts`;
-      }
-      const finalWav=makeWav(pcm), blob=new Blob([finalWav],{type:'audio/wav'}), url=URL.createObjectURL(blob);
-      if(window.__unlimitedAudioUrl) URL.revokeObjectURL(window.__unlimitedAudioUrl);
-      window.__unlimitedAudioUrl=url; if(audio) audio.src=url;
-      if(download){download.disabled=false; download.onclick=()=>{const a=document.createElement('a');a.href=url;a.download='gemini-ai-voice-unlimited.wav';a.click();};}
-      if(status) status.textContent=`✓ အသံထုတ်ပြီးပါပြီ — ${chunks.length} parts / ${text.length.toLocaleString()} characters`;
-      $('ready') && ($('ready').textContent='READY');
-    }catch(e){
-      if(status) status.textContent=e.name==='AbortError'?'ရပ်လိုက်ပါပြီ။':`❌ ${e.message||'TTS failed'}`;
-    }finally{
-      controller=null; if(button){button.disabled=false; button.dataset.unlimitedBusy='';}
-    }
-  }
-
-  function install(){
-    const button=$('generate'); if(!button||button.dataset.unlimitedInstalled)return;
-    button.dataset.unlimitedInstalled='1';
-    button.addEventListener('click',function(e){
-      const ai=$('aiMode');
-      if(ai && !ai.classList.contains('active')) return;
-      e.preventDefault(); e.stopImmediatePropagation(); generateUnlimited();
-    },true);
-    $('stop')?.addEventListener('click',()=>{if(controller)controller.abort(); if($('audio'))$('audio').pause();});
-    const text=$('text'), counter=$('counter');
-    if(text){ text.removeAttribute('maxlength'); text.addEventListener('input',()=>{if(counter)counter.textContent=`${text.value.length.toLocaleString()} characters`;}); }
-    if(counter && text) counter.textContent=`${text.value.length.toLocaleString()} characters`;
-  }
-  window.addEventListener('DOMContentLoaded',install); setTimeout(install,100); setTimeout(install,800);
-})();
-</script>
-'''
-              s = s.replace('</body>', patch + '</body>')
-              changed = True
-
-          # Keep the language field in normal AI requests too.
-          old = "JSON.stringify({text,voice:$(\'voice\').value,style:$(\'style\').value,speed:Number($(\'speed\').value),volume:Number($(\'volume\').value)})"
-          new = "JSON.stringify({text,voice:$(\'voice\').value,style:$(\'style\').value,language:currentLang,speed:Number($(\'speed\').value),volume:Number($(\'volume\').value)})"
-          if old in s:
-              s = s.replace(old, new, 1)
+              patch = '''
+          <!-- UNLIMITED-TTS-V1 -->
+          <script>
+          (function(){
+            let controller=null;
+            const CHUNK=2400;
+            const $=id=>document.getElementById(id);
+            function splitText(text){
+              const out=[]; let rest=text.trim();
+              while(rest.length>CHUNK){
+                let cut=rest.lastIndexOf('။',CHUNK);
+                if(cut<CHUNK*0.55) cut=rest.lastIndexOf(' ',CHUNK);
+                if(cut<CHUNK*0.55) cut=CHUNK;
+                const end=cut+(rest[cut]==='။'?1:0);
+                out.push(rest.slice(0,end).trim()); rest=rest.slice(end).trim();
+              }
+              if(rest) out.push(rest); return out;
+            }
+            function decode(s){const b=atob(s),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
+            function wav(parts){
+              const len=parts.reduce((n,p)=>n+p.length,0),o=new Uint8Array(44+len),v=new DataView(o.buffer),e=new TextEncoder();
+              o.set(e.encode('RIFF'),0);v.setUint32(4,36+len,true);o.set(e.encode('WAVE'),8);o.set(e.encode('fmt '),12);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,24000,true);v.setUint32(28,48000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);o.set(e.encode('data'),36);v.setUint32(40,len,true);let n=44;for(const p of parts){o.set(p,n);n+=p.length;}return o;
+            }
+            async function generate(){
+              const text=($('text')?.value||'').trim(); if(!text)return;
+              const button=$('generate'),status=$('status'),audio=$('audio'),download=$('download');
+              const endpoint=($('ttsEndpoint')?.value||'/api/tts').trim()||'/api/tts',chunks=splitText(text),parts=[];
+              controller=new AbortController(); if(button)button.disabled=true;
+              if(status)status.textContent=`AI Voice ထုတ်နေပါတယ်… 0 / ${chunks.length} parts`;
+              try{
+                for(let i=0;i<chunks.length;i++){
+                  const body={text:chunks[i],voice:$('voice')?.value||'Kore',style:$('style')?.value||'',language:window.currentLang||document.documentElement.lang||'my',speed:Number($('speed')?.value||1),volume:Number($('volume')?.value||1)};
+                  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+                  const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||`TTS error ${r.status}`);
+                  const a=decode(d.audio||''); if(a.length<=44)throw new Error('AI Voice returned empty audio'); parts.push(a.slice(44));
+                  if(status)status.textContent=`AI Voice ထုတ်နေပါတယ်… ${i+1} / ${chunks.length} parts`;
+                }
+                const blob=new Blob([wav(parts)],{type:'audio/wav'}),url=URL.createObjectURL(blob);if(window.__u)URL.revokeObjectURL(window.__u);window.__u=url;
+                if(audio)audio.src=url;if(download){download.disabled=false;download.onclick=()=>{const a=document.createElement('a');a.href=url;a.download='gemini-ai-voice.wav';a.click();};}
+                if(status)status.textContent=`✓ အသံထုတ်ပြီးပါပြီ — ${text.length.toLocaleString()} characters / ${chunks.length} parts`;
+              }catch(e){if(status)status.textContent=e.name==='AbortError'?'ရပ်လိုက်ပါပြီ။':`❌ ${e.message||'TTS failed'}`;}
+              finally{controller=null;if(button)button.disabled=false;}
+            }
+            function install(){
+              const b=$('generate');if(!b||b.dataset.unlimitedInstalled)return;b.dataset.unlimitedInstalled='1';
+              b.addEventListener('click',function(e){const ai=$('aiMode');if(ai&&!ai.classList.contains('active'))return;e.preventDefault();e.stopImmediatePropagation();generate();},true);
+              $('stop')?.addEventListener('click',()=>{if(controller)controller.abort();$('audio')?.pause();});
+              const t=$('text'),c=$('counter');if(t){t.removeAttribute('maxlength');t.addEventListener('input',()=>{if(c)c.textContent=`${t.value.length.toLocaleString()} characters`;});if(c)c.textContent=`${t.value.length.toLocaleString()} characters`;}
+            }
+            window.addEventListener('DOMContentLoaded',install);setTimeout(install,100);setTimeout(install,800);
+          })();
+          </script>
+          '''
+              s = s.replace('</body>', patch + '\n</body>')
               changed = True
 
           p.write_text(s, encoding='utf-8')
-          print('Updated index.html' if changed else 'No changes needed')
+          print('changed' if changed else 'no changes')
           PY
-      - name: Commit patch
+      - name: Commit UI patch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
