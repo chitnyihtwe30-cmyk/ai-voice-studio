@@ -1,12 +1,14 @@
 const MODEL = 'gemini-3.1-flash-tts-preview';
 const MAX_CHARS = 2600;
-const MAX_RETRIES = 3;
+const MAX_TOTAL_CHARS = 5000;
+const MAX_RETRIES = 2;
 
 function chunkText(text) {
   const chunks = [];
   let rest = text.trim();
   while (rest.length > MAX_CHARS) {
     let cut = rest.lastIndexOf('။', MAX_CHARS);
+    if (cut < MAX_CHARS * 0.55) cut = rest.lastIndexOf('။', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = rest.lastIndexOf(' ', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = MAX_CHARS;
     chunks.push(rest.slice(0, cut + (rest[cut] === '။' ? 1 : 0)).trim());
@@ -64,15 +66,30 @@ function pcmWav(chunks, sampleRate = 24000, channels = 1, bits = 16) {
 }
 
 function isRetryableStatus(status) {
-  return status === 408 || status === 429 || status >= 500;
+  return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
 }
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function generateChunk(apiKey, text, voice, style) {
-  const prompt = `Synthesize speech only. Do not explain anything. Language: Burmese (Myanmar). Voice direction: ${style || 'Speak naturally, clearly and warmly.'}\nSpoken transcript:\n${text}`;
+function cleanErrorMessage(status, rawMessage) {
+  const message = String(rawMessage || '').trim();
+  if (status === 429) {
+    return 'Gemini AI Voice limit ရောက်နေပါတယ်။ ခဏစောင့်ပြီး ထပ်စမ်းပါ။ မကြာခဏဖြစ်ရင် Gemini API quota/billing ကို စစ်ပါ။';
+  }
+  if (status === 401 || status === 403) {
+    return 'Gemini API Key / project permission ပြဿနာရှိပါတယ်။ Server-side GEMINI_API_KEY ကို စစ်ပါ။';
+  }
+  if (status === 400) {
+    return message || 'Gemini request မမှန်ကန်ပါ။ Voice / text / style ကို စစ်ပါ။';
+  }
+  return message || `Gemini API error ${status}`;
+}
+
+async function generateChunk(apiKey, text, voice, style, language) {
+  const languageName = language === 'en' ? 'English' : 'Burmese (Myanmar)';
+  const prompt = `Synthesize speech only. Do not explain anything. Language: ${languageName}. Voice direction: ${style || 'Speak naturally, clearly and warmly.'}\nSpoken transcript:\n${text}`;
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -99,17 +116,18 @@ async function generateChunk(apiKey, text, voice, style) {
         return base64ToBytes(audio.data);
       }
 
-      const message = data?.error?.message || `Gemini API error ${r.status}`;
-      const error = new Error(message);
+      const rawMessage = data?.error?.message || `Gemini API error ${r.status}`;
+      const error = new Error(cleanErrorMessage(r.status, rawMessage));
       error.status = r.status;
+      error.rawMessage = rawMessage;
       lastError = error;
 
       if (!isRetryableStatus(r.status) || attempt === MAX_RETRIES) throw error;
-      await sleep(700 * attempt);
+      await sleep(1000 * attempt);
     } catch (e) {
       lastError = e;
       if (attempt === MAX_RETRIES || (e?.status && !isRetryableStatus(e.status))) throw e;
-      await sleep(700 * attempt);
+      await sleep(1000 * attempt);
     }
   }
 
@@ -129,25 +147,25 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
     }
 
-    const { text, voice, style } = req.body || {};
+    const { text, voice, style, language } = req.body || {};
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ error: 'Text is required.' });
     }
-    if (text.length > 5000) {
-      return res.status(400).json({ error: 'Maximum 5,000 characters.' });
+    if (text.length > MAX_TOTAL_CHARS) {
+      return res.status(400).json({ error: `Maximum ${MAX_TOTAL_CHARS.toLocaleString()} characters.` });
     }
 
     const chunks = chunkText(text);
     const audioChunks = [];
 
     for (const chunk of chunks) {
-      audioChunks.push(await generateChunk(apiKey, chunk, voice, style));
+      audioChunks.push(await generateChunk(apiKey, chunk, voice, style, language));
     }
 
     const wav = pcmWav(audioChunks);
     return res.status(200).json({
       mime: 'audio/wav',
-      filename: 'gemini-burmese-voice.wav',
+      filename: 'gemini-ai-voice.wav',
       audio: wav.toString('base64'),
       chunks: chunks.length,
       model: MODEL,
@@ -156,7 +174,7 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     const status = Number(e?.status) || 500;
-    const clientStatus = status === 429 ? 429 : (status >= 500 ? 503 : 500);
+    const clientStatus = status === 429 ? 429 : (status >= 500 ? 503 : status === 400 ? 400 : 500);
     return res.status(clientStatus).json({
       error: e?.message || 'TTS generation failed.',
       provider: 'gemini',
