@@ -8,8 +8,8 @@
 </style></head>
 <body><main class="wrap">
 <header class="top"><div class="brand"><div class="logo">✦</div><div><div class="eyebrow">GEMINI AI VOICE STUDIO</div><h1>အသံစတူဒီယို</h1></div></div><div class="lang"><button id="mm" class="active">မြန်မာ</button><button id="en">English</button></div></header>
-<section class="card"><div class="intro"><h2>AI Voice Studio</h2><p id="intro">စာသားရေးပါ၊ AI Voice သို့မဟုတ် Voice Clone ကိုရွေးပြီး အသံထုတ်ပါ။ စာဘယ်လောက်ရှည်ရှည် ထုတ်နိုင်ပါတယ်။</p><span class="badge">BURMESE VOICE • GEMINI TTS</span></div>
-<label class="label"><span id="textLabel">စာသား</span><span id="counter">0 characters</span></label><textarea id="text"  placeholder="ဒီနေရာမှာ မြန်မာလို ပြောစေချင်တဲ့စာကို ရေးပါ..."></textarea>
+<section class="card"><div class="intro"><h2>AI Voice Studio</h2><p id="intro">စာသားရေးပါ၊ AI Voice သို့မဟုတ် Voice Clone ကိုရွေးပြီး အသံထုတ်ပါ။ စာလုံး 5,000 အထိ ထည့်ပြီး အသံထုတ်နိုင်ပါတယ်။</p><span class="badge">BURMESE VOICE • GEMINI TTS</span></div>
+<label class="label"><span id="textLabel">စာသား</span><span id="counter">0 / 5,000</span></label><textarea id="text" maxlength="5000" placeholder="ဒီနေရာမှာ မြန်မာလို ပြောစေချင်တဲ့စာကို ရေးပါ..."></textarea>
 <div class="modes"><button class="mode active" id="aiMode"><strong>✦ AI အသံ</strong><span>Gemini နဲ့ မြန်မာအသံထုတ်မယ်</span></button><button class="mode" id="cloneMode"><strong>🎙️ Clone အသံ</strong><span>ကိုယ်ပိုင်အသံ sample နဲ့ backend ကိုပို့မယ်</span></button></div>
 <div id="aiPanel" class="panel"><div class="grid"><div><label class="label">AI အသံ</label><select id="voice"><option value="Kore">Kore — Natural</option><option value="Puck">Puck — Bright</option><option value="Charon">Charon — Deep</option><option value="Aoede">Aoede — Warm</option><option value="Leda">Leda — Soft</option><option value="Orus">Orus — Calm</option><option value="Zephyr">Zephyr — Clear</option><option value="Fenrir">Fenrir — Strong</option><option value="Callirrhoe">Callirrhoe</option><option value="Autonoe">Autonoe</option><option value="Enceladus">Enceladus</option><option value="Iapetus">Iapetus</option><option value="Umbriel">Umbriel</option><option value="Algieba">Algieba</option><option value="Despina">Despina</option><option value="Erinome">Erinome</option><option value="Algenib">Algenib</option><option value="Rasalgethi">Rasalgethi</option><option value="Laomedeia">Laomedeia</option><option value="Achernar">Achernar</option><option value="Alnilam">Alnilam</option><option value="Schedar">Schedar</option><option value="Gacrux">Gacrux</option><option value="Pulcherrima">Pulcherrima</option><option value="Achird">Achird</option><option value="Zubenelgenubi">Zubenelgenubi</option><option value="Vindemiatrix">Vindemiatrix</option><option value="Sadachbia">Sadachbia</option><option value="Sadaltager">Sadaltager</option><option value="Sulafat">Sulafat</option></select></div><div><label class="label">အသံပုံစံ</label><input id="style" type="text" value="Speak naturally, clearly and warmly."></div></div><div class="grid"><div><label class="label">အမြန်နှုန်း <b id="speedVal">1.00x</b></label><input id="speed" type="range" min="0.7" max="1.3" step="0.05" value="1"></div><div><label class="label">အသံအတိုးအကျယ် <b id="volVal">100%</b></label><input id="volume" type="range" min="0" max="1" step="0.05" value="1"></div></div></div>
 <div id="clonePanel" class="panel clonePanel"><div class="upload"><input id="sample" type="file" accept="audio/*,video/mp4,.mp3,.wav,.m4a,.flac,.ogg,.mp4"><label for="sample">🎙️ Voice Sample ရွေးပါ</label><div id="sampleName" class="sampleName">MP3 / WAV / M4A / FLAC / OGG / MP4</div><div id="sampleMeta" class="sampleMeta"></div></div><audio id="sampleAudio" class="sampleAudio" controls></audio><div class="mp4note">🎬 MP4 ကိုလည်း တိုက်ရိုက်ရွေးနိုင်ပါပြီ။ Clone backend က MP4 ကိုလက်ခံပြီး audio extraction/FFmpeg လုပ်နိုင်ရမယ်။ Backend က audio-only ပဲလက်ခံရင် နောက်အဆင့်မှာ MP4 → MP3 server conversion ထည့်ပေးမယ်။</div><label class="label">Clone Backend URL</label><input id="backend" type="text" placeholder="https://your-clone-backend.example"><div class="note">ကိုယ်ပိုင်အသံ သို့မဟုတ် ခွင့်ပြုချက်ရထားတဲ့အသံကိုသာ အသုံးပြုပါ။ Clone mode အတွက် သီးသန့် voice-clone server လိုအပ်ပါတယ်။</div></div>
@@ -35,60 +35,40 @@ function browserFallback(text){if(!('speechSynthesis' in window))throw new Error
 async function aiGenerate(){const text=$('text').value.trim();if(!text)return alert('စာသားထည့်ပါ။');const endpoint=$('ttsEndpoint').value.trim()||'/api/tts';$('generate').disabled=true;$('download').disabled=true;$('ready').textContent='GENERATING';$('status').textContent='Gemini TTS အသံထုတ်နေပါတယ်…';try{const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,voice:$('voice').value,style:$('style').value,language:currentLang,speed:Number($('speed').value),volume:Number($('volume').value)})});let d={};try{d=await r.json()}catch{}if(!r.ok){const e=new Error(d.error||'Backend request failed');e.fallbackRequested=d.fallback==='browser'||r.status===429||r.status===503;throw e}if(!d.audio)throw new Error('Audio data မရပါ');if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(b64ToBlob(d.audio,d.mime||'audio/wav'));$('audio').src=audioUrl;$('audio').volume=Number($('volume').value);$('download').disabled=false;$('ready').textContent='READY';$('status').textContent='ပြီးပါပြီ ✓ '+(d.chunks||1)+' audio chunk'}catch(e){if(e.fallbackRequested||e.name==='TypeError'||/429|503|quota|limit|fetch|TTS/i.test(e.message||'')){try{if(audioUrl){URL.revokeObjectURL(audioUrl);audioUrl=''}browserFallback(text);$('download').disabled=true;return}catch(fb){$('ready').textContent='ERROR';$('status').textContent='❌ Gemini နဲ့ Browser Voice နှစ်ခုလုံး မအလုပ်လုပ်ပါ: '+fb.message}}$('ready').textContent='ERROR';$('status').textContent='❌ '+e.message;if(location.hostname.includes('github.io'))$('status').textContent+=' — GitHub Pages မှာ backend မပါလို့ Vercel backend deployment လုပ်ရန်လိုပါတယ်။'}finally{$('generate').disabled=false}}
 async function cloneGenerate(){const text=$('text').value.trim(),file=$('sample').files[0],endpoint=$('backend').value.trim();if(!text)return alert('စာသားထည့်ပါ။');if(!file)return alert('Voice Sample ရွေးပါ။');if(!endpoint)return alert('Clone Backend URL ထည့်ပါ။');$('generate').disabled=true;$('status').textContent=(file.type==='video/mp4'||/\.mp4$/i.test(file.name))?'🎬 MP4 ကို clone backend ကိုပို့နေပါတယ်…':'🎙️ Voice sample ကို clone backend ကိုပို့နေပါတယ်…';try{const fd=new FormData();fd.append('text',text);fd.append('audio',file,file.name);const r=await fetch(endpoint.replace(/\/$/,'')+'/clone',{method:'POST',body:fd});if(!r.ok){let msg='Clone backend error '+r.status;try{const d=await r.json();if(d.error)msg=d.error}catch{}throw new Error(msg)}const blob=await r.blob();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl=URL.createObjectURL(blob);$('audio').src=audioUrl;$('download').disabled=false;$('ready').textContent='READY';$('status').textContent='Voice clone ပြီးပါပြီ ✓'}catch(e){$('ready').textContent='ERROR';$('status').textContent='❌ '+e.message}finally{$('generate').disabled=false}}
 $('generate').onclick=()=>mode==='ai'?aiGenerate():cloneGenerate();
-$('mm').onclick=()=>{currentLang='my';document.documentElement.lang='my';$('mm').classList.add('active');$('en').classList.remove('active');$('intro').textContent='စာသားရေးပါ၊ AI Voice သို့မဟုတ် Voice Clone ကိုရွေးပြီး အသံထုတ်ပါ။ စာဘယ်လောက်ရှည်ရှည် ထုတ်နိုင်ပါတယ်။';$('textLabel').textContent='စာသား';applyVoiceLabels()};
+$('mm').onclick=()=>{currentLang='my';document.documentElement.lang='my';$('mm').classList.add('active');$('en').classList.remove('active');$('intro').textContent='စာသားရေးပါ၊ AI Voice သို့မဟုတ် Voice Clone ကိုရွေးပြီး အသံထုတ်ပါ။ စာလုံး 5,000 အထိ ထည့်ပြီး အသံထုတ်နိုင်ပါတယ်။';$('textLabel').textContent='စာသား';applyVoiceLabels()};
 $('en').onclick=()=>{currentLang='en';document.documentElement.lang='en';$('en').classList.add('active');$('mm').classList.remove('active');$('intro').textContent='Write text, choose AI Voice or Voice Clone, and generate audio. Up to 5,000 characters.';$('textLabel').textContent='Text';applyVoiceLabels()};
 applyVoiceLabels();
 </script>\n<!-- GEMINI-30-VOICE-FIX-V3 -->\n<script>\n(function(){\nconst V={Zephyr:['Bright','တောက်ပသောအသံ'],Puck:['Upbeat','စိတ်တက်ကြွသောအသံ'],Charon:['Informative','သတင်းအချက်အလက်ပေးသလိုအသံ'],Kore:['Firm','ခိုင်မာသောအသံ'],Fenrir:['Excitable','စိတ်လှုပ်ရှားဖွယ်အသံ'],Leda:['Youthful','လူငယ်ဆန်သောအသံ'],Orus:['Firm','ခိုင်မာသောအသံ'],Aoede:['Breezy','လေပြေလိုနူးညံ့သောအသံ'],Callirrhoe:['Easy-going','ပေါ့ပါးအေးဆေးသောအသံ'],Autonoe:['Bright','တောက်ပသောအသံ'],Enceladus:['Breathy','လေမှုတ်သလိုနူးညံ့သောအသံ'],Iapetus:['Clear','ရှင်းလင်းသောအသံ'],Umbriel:['Easy-going','ပေါ့ပါးအေးဆေးသောအသံ'],Algieba:['Smooth','ချောမွေ့သောအသံ'],Despina:['Smooth','ချောမွေ့သောအသံ'],Erinome:['Clear','ရှင်းလင်းသောအသံ'],Algenib:['Gravelly','ကြမ်းသံပါသောအသံ'],Rasalgethi:['Informative','သတင်းအချက်အလက်ပေးသလိုအသံ'],Laomedeia:['Upbeat','စိတ်တက်ကြွသောအသံ'],Achernar:['Soft','နူးညံ့သောအသံ'],Alnilam:['Firm','ခိုင်မာသောအသံ'],Schedar:['Even','ညီညာသောအသံ'],Gacrux:['Mature','ရင့်ကျက်သောအသံ'],Pulcherrima:['Forward','ရှေ့ဆောင်သလိုအားတက်သောအသံ'],Achird:['Friendly','ဖော်ရွေသောအသံ'],Zubenelgenubi:['Casual','ပေါ့ပေါ့ပါးပါးသောအသံ'],Vindemiatrix:['Gentle','နူးညံ့သိမ်မွေ့သောအသံ'],Sadachbia:['Lively','တက်ကြွသောအသံ'],Sadaltager:['Knowledgeable','ဗဟုသုတရှိသလိုအသံ'],Sulafat:['Warm','နွေးထွေးသောအသံ']};\nfunction apply(){const s=document.getElementById('voice');if(!s)return;const my=document.documentElement.lang!=='en';Array.from(s.options).forEach(o=>{const n=o.value||o.dataset.gn;if(!n||!V[n])return;o.dataset.gn=n;o.textContent=n+' — '+(my?V[n][1]:V[n][0]);});}\nfunction refresh(){apply();}\nconst old=window.setLang;window.setLang=function(l){if(typeof old==='function')old(l);refresh();setTimeout(refresh,50);setTimeout(refresh,300);};\nnew MutationObserver(refresh).observe(document.body,{subtree:true,childList:true,characterData:true});\nwindow.addEventListener('load',refresh);\nsetInterval(refresh,300);\n})();\n</script>\n
-<!-- UNLIMITED-TTS-V1 -->
+
+
+<!-- TTS-LIMIT-5000 -->
 <script>
 (function(){
-  let controller=null;
-  const CHUNK=2400;
-  const $=id=>document.getElementById(id);
-  function splitText(text){
-    const out=[]; let rest=text.trim();
-    while(rest.length>CHUNK){
-      let cut=rest.lastIndexOf('။',CHUNK);
-      if(cut<CHUNK*0.55) cut=rest.lastIndexOf(' ',CHUNK);
-      if(cut<CHUNK*0.55) cut=CHUNK;
-      const end=cut+(rest[cut]==='။'?1:0);
-      out.push(rest.slice(0,end).trim()); rest=rest.slice(end).trim();
-    }
-    if(rest) out.push(rest); return out;
-  }
-  function decode(s){const b=atob(s),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
-  function wav(parts){
-    const len=parts.reduce((n,p)=>n+p.length,0),o=new Uint8Array(44+len),v=new DataView(o.buffer),e=new TextEncoder();
-    o.set(e.encode('RIFF'),0);v.setUint32(4,36+len,true);o.set(e.encode('WAVE'),8);o.set(e.encode('fmt '),12);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,24000,true);v.setUint32(28,48000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);o.set(e.encode('data'),36);v.setUint32(40,len,true);let n=44;for(const p of parts){o.set(p,n);n+=p.length;}return o;
-  }
-  async function generate(){
-    const text=($('text')?.value||'').trim(); if(!text)return;
-    const button=$('generate'),status=$('status'),audio=$('audio'),download=$('download');
-    const endpoint=($('ttsEndpoint')?.value||'/api/tts').trim()||'/api/tts',chunks=splitText(text),parts=[];
-    controller=new AbortController(); if(button)button.disabled=true;
-    if(status)status.textContent=`AI Voice ထုတ်နေပါတယ်… 0 / ${chunks.length} parts`;
-    try{
-      for(let i=0;i<chunks.length;i++){
-        const body={text:chunks[i],voice:$('voice')?.value||'Kore',style:$('style')?.value||'',language:window.currentLang||document.documentElement.lang||'my',speed:Number($('speed')?.value||1),volume:Number($('volume')?.value||1)};
-        const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
-        const d=await r.json().catch(()=>({})); if(!r.ok)throw new Error(d.error||`TTS error ${r.status}`);
-        const a=decode(d.audio||''); if(a.length<=44)throw new Error('AI Voice returned empty audio'); parts.push(a.slice(44));
-        if(status)status.textContent=`AI Voice ထုတ်နေပါတယ်… ${i+1} / ${chunks.length} parts`;
+  function installLimit(){
+    const text=document.getElementById('text');
+    const counter=document.getElementById('counter');
+    const button=document.getElementById('generate');
+    if(!text||!counter||!button||button.dataset.limit5000Installed)return;
+    button.dataset.limit5000Installed='1';
+    const update=()=>{
+      if(text.value.length>5000) text.value=text.value.slice(0,5000);
+      counter.textContent=text.value.length.toLocaleString()+' / 5,000';
+    };
+    text.addEventListener('input',update);
+    button.addEventListener('click',function(e){
+      if(text.value.length>5000){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        counter.textContent='5,000 / 5,000';
+        const status=document.getElementById('status');
+        if(status)status.textContent='❌ စာသားအရှည်သည် 5,000 characters ထက် မကျော်ရပါ။';
       }
-      const blob=new Blob([wav(parts)],{type:'audio/wav'}),url=URL.createObjectURL(blob);if(window.__u)URL.revokeObjectURL(window.__u);window.__u=url;
-      if(audio)audio.src=url;if(download){download.disabled=false;download.onclick=()=>{const a=document.createElement('a');a.href=url;a.download='gemini-ai-voice.wav';a.click();};}
-      if(status)status.textContent=`✓ အသံထုတ်ပြီးပါပြီ — ${text.length.toLocaleString()} characters / ${chunks.length} parts`;
-    }catch(e){if(status)status.textContent=e.name==='AbortError'?'ရပ်လိုက်ပါပြီ။':`❌ ${e.message||'TTS failed'}`;}
-    finally{controller=null;if(button)button.disabled=false;}
+    },true);
+    update();
   }
-  function install(){
-    const b=$('generate');if(!b||b.dataset.unlimitedInstalled)return;b.dataset.unlimitedInstalled='1';
-    b.addEventListener('click',function(e){const ai=$('aiMode');if(ai&&!ai.classList.contains('active'))return;e.preventDefault();e.stopImmediatePropagation();generate();},true);
-    $('stop')?.addEventListener('click',()=>{if(controller)controller.abort();$('audio')?.pause();});
-    const t=$('text'),c=$('counter');if(t){t.removeAttribute('maxlength');t.addEventListener('input',()=>{if(c)c.textContent=`${t.value.length.toLocaleString()} characters`;});if(c)c.textContent=`${t.value.length.toLocaleString()} characters`;}
-  }
-  window.addEventListener('DOMContentLoaded',install);setTimeout(install,100);setTimeout(install,800);
+  window.addEventListener('DOMContentLoaded',installLimit);
+  setTimeout(installLimit,100);
+  setTimeout(installLimit,800);
 })();
 </script>
-
 </body></html>
