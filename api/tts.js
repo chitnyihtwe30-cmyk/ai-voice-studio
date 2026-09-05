@@ -1,6 +1,5 @@
 const MODEL = 'gemini-3.1-flash-tts-preview';
-const MAX_CHARS = 2600;
-const MAX_TOTAL_CHARS = 5000;
+const MAX_CHARS = 2600; // Internal Gemini chunk size; users are not limited by this.
 const MAX_RETRIES = 2;
 
 function chunkText(text) {
@@ -10,8 +9,9 @@ function chunkText(text) {
     let cut = rest.lastIndexOf('။', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = rest.lastIndexOf(' ', MAX_CHARS);
     if (cut < MAX_CHARS * 0.55) cut = MAX_CHARS;
-    chunks.push(rest.slice(0, cut + (rest[cut] === '။' ? 1 : 0)).trim());
-    rest = rest.slice(cut + (rest[cut] === '။' ? 1 : 0)).trim();
+    const end = cut + (rest[cut] === '။' ? 1 : 0);
+    chunks.push(rest.slice(0, end).trim());
+    rest = rest.slice(end).trim();
   }
   if (rest) chunks.push(rest);
   return chunks;
@@ -159,8 +159,9 @@ export default async function handler(req, res) {
 
     const { text, voice, style, language, speed, volume } = req.body || {};
     if (!text || typeof text !== 'string') return res.status(400).json({ error: 'Text is required.' });
-    if (text.length > MAX_TOTAL_CHARS) return res.status(400).json({ error: `Maximum ${MAX_TOTAL_CHARS.toLocaleString()} characters.` });
 
+    // There is deliberately no user-facing total-character limit here.
+    // The browser batches long text into safe requests so each Vercel response stays small.
     const selectedLanguage = language === 'en' ? 'en' : 'my';
     const chunks = chunkText(text);
     const audioChunks = [];
