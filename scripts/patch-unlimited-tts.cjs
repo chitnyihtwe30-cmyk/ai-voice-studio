@@ -1,0 +1,21 @@
+const fs = require('fs');
+const path = 'index.html';
+let s = fs.readFileSync(path, 'utf8');
+let changed = false;
+for (const [a,b] of [['5,000 characters အထိ အသုံးပြုနိုင်ပါတယ်။','စာဘယ်လောက်ရှည်ရှည် ထုတ်နိုင်ပါတယ်။'],['0 / 5,000','0 characters'],['maxlength="5000"','']]) { if (s.includes(a)) { s=s.split(a).join(b); changed=true; } }
+const marker='<!-- UNLIMITED-TTS-V1 -->';
+if(!s.includes(marker)){
+const patch=`<!-- UNLIMITED-TTS-V1 -->
+<script>
+(function(){
+let controller=null;const CHUNK=2400,$=id=>document.getElementById(id);
+function splitText(t){const a=[];let r=t.trim();while(r.length>CHUNK){let c=r.lastIndexOf('။',CHUNK);if(c<CHUNK*.55)c=r.lastIndexOf(' ',CHUNK);if(c<CHUNK*.55)c=CHUNK;let e=c+(r[c]==='။'?1:0);a.push(r.slice(0,e).trim());r=r.slice(e).trim();}if(r)a.push(r);return a;}
+function decode(s){const b=atob(s),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
+function wav(ps){const n=ps.reduce((x,p)=>x+p.length,0),o=new Uint8Array(44+n),v=new DataView(o.buffer),e=new TextEncoder();o.set(e.encode('RIFF'),0);v.setUint32(4,36+n,true);o.set(e.encode('WAVE'),8);o.set(e.encode('fmt '),12);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,24000,true);v.setUint32(28,48000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);o.set(e.encode('data'),36);v.setUint32(40,n,true);let q=44;for(const p of ps){o.set(p,q);q+=p.length;}return o;}
+async function run(){const text=($('text')?.value||'').trim();if(!text)return;const btn=$('generate'),st=$('status'),au=$('audio'),dl=$('download'),ep=($('ttsEndpoint')?.value||'/api/tts').trim()||'/api/tts',cs=splitText(text),ps=[];controller=new AbortController();if(btn)btn.disabled=true;if(st)st.textContent='AI Voice ထုတ်နေပါတယ်… 0 / '+cs.length+' parts';try{for(let i=0;i<cs.length;i++){const body={text:cs[i],voice:$('voice')?.value||'Kore',style:$('style')?.value||'',language:window.currentLang||document.documentElement.lang||'my',speed:Number($('speed')?.value||1),volume:Number($('volume')?.value||1)};const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||('TTS error '+r.status));const x=decode(d.audio||'');if(x.length<=44)throw Error('AI Voice returned empty audio');ps.push(x.slice(44));if(st)st.textContent='AI Voice ထုတ်နေပါတယ်… '+(i+1)+' / '+cs.length+' parts';}const url=URL.createObjectURL(new Blob([wav(ps)],{type:'audio/wav'}));if(window.__u)URL.revokeObjectURL(window.__u);window.__u=url;if(au)au.src=url;if(dl){dl.disabled=false;dl.onclick=()=>{const a=document.createElement('a');a.href=url;a.download='gemini-ai-voice.wav';a.click();};}if(st)st.textContent='✓ အသံထုတ်ပြီးပါပြီ — '+text.length.toLocaleString()+' characters / '+cs.length+' parts';}catch(e){if(st)st.textContent=e.name==='AbortError'?'ရပ်လိုက်ပါပြီ။':'❌ '+(e.message||'TTS failed');}finally{controller=null;if(btn)btn.disabled=false;}}
+function install(){const b=$('generate');if(!b||b.dataset.unlimitedInstalled)return;b.dataset.unlimitedInstalled='1';b.addEventListener('click',e=>{const ai=$('aiMode');if(ai&&!ai.classList.contains('active'))return;e.preventDefault();e.stopImmediatePropagation();run();},true);$('stop')?.addEventListener('click',()=>{if(controller)controller.abort();$('audio')?.pause();});const t=$('text'),c=$('counter');if(t){t.removeAttribute('maxlength');t.addEventListener('input',()=>{if(c)c.textContent=t.value.length.toLocaleString()+' characters';});if(c)c.textContent=t.value.length.toLocaleString()+' characters';}}
+window.addEventListener('DOMContentLoaded',install);setTimeout(install,100);setTimeout(install,800);})();
+</script>
+`;
+s=s.replace('</body>',patch+'</body>');changed=true;}
+fs.writeFileSync(path,s,'utf8');console.log(changed?'Unlimited TTS UI patched.':'No changes needed.');
