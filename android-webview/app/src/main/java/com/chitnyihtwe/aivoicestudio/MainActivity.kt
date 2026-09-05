@@ -58,7 +58,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
 
         @JavascriptInterface
-        fun stop() { tts.stop(); cloneTts?.stop() }
+        fun stop() { tts.stop() }
 
         @JavascriptInterface
         fun pickSample() {
@@ -68,9 +68,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             startActivityForResult(intent, pickRequest)
         }
-
-        @JavascriptInterface
-        fun sampleName(): String = sampleUri?.lastPathSegment ?: ""
 
         @JavascriptInterface
         fun clone(text: String, referenceText: String, steps: Int) {
