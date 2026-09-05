@@ -1,6 +1,19 @@
 # Voice Clone Backend Deployment
 
-The frontend can be hosted as a static website, but XTTS-v2 needs a Python server with enough CPU/RAM and disk for the model.
+The AI Voice Studio frontend can be hosted as a static website, while the VoxCPM2 voice-clone API must run on a Python compute service with enough CPU/RAM/disk for the model. GPU is strongly recommended for practical response times.
+
+## Backend API
+
+The canonical backend is `voice-clone/app.py`.
+
+Endpoints:
+
+- `GET /health` — service/model health information
+- `POST /clone` — accepts `text` plus an audio/video upload in the `audio`, `file`, or `sample` field
+
+Supported sample formats include WAV, MP3, M4A, FLAC, OGG, AAC, WebM, and MP4. MP4/video uploads are converted to mono 16 kHz WAV with FFmpeg before cloning.
+
+The API accepts up to 5,000 text characters and a 25 MB reference-media file.
 
 ## Docker
 
@@ -17,21 +30,21 @@ Then test:
 http://localhost:7860/health
 ```
 
-For a public deployment, set the frontend's **Backend URL** to the public HTTPS URL of this server.
+For a public deployment, set the frontend's **Clone Backend URL** to the public HTTPS URL of this server.
 
-## Free-hosting note
+## Production notes
 
-Do not assume a static hosting service can run this backend. A static host can serve `index.html`, but the XTTS-v2 Python process must run on a compute service that permits the required dependencies and resources.
+Do not put the Gemini API key or other server secrets in the static frontend. The clone backend currently does not require a secret for local testing, but a production deployment should add authentication/rate limiting before exposing a public GPU endpoint.
+
+A static hosting service can serve `index.html`, but it cannot run this Python model server. Use a compute service that supports Docker/Python and provides enough memory for VoxCPM2.
 
 ### Render
 
-Render currently offers free web services, including Python/FastAPI services and Docker deployments. Free services can sleep after 15 minutes without inbound traffic and have limited CPU/RAM, so XTTS-v2 may be slow or may fail if the model exceeds the available resources. Use Render mainly as a test option.
-
-For deployment, create a **Web Service**, connect this GitHub repository, and set the service root directory to `voice-clone`. Use the Docker runtime or the Python runtime with the project's requirements. After deployment, verify `/health` before putting the URL into the frontend.
+Render can run Python/FastAPI services and Docker deployments. Low-resource/free instances may sleep or lack enough memory/compute for VoxCPM2, so treat them as testing options and verify `/health` and an actual `/clone` request after deployment.
 
 ### Hugging Face
 
-Static Spaces cannot run this FastAPI backend. Hugging Face currently provides free ZeroGPU hosting for eligible personal accounts, but ZeroGPU Spaces are Gradio-only, so this FastAPI/Docker backend cannot be moved there unchanged. A separate Gradio version would be needed.
+A static Space cannot run this FastAPI backend unchanged. If using a Hugging Face Space, the deployment must use a compatible runtime/application design and sufficient compute for VoxCPM2.
 
 ## Safety
 
