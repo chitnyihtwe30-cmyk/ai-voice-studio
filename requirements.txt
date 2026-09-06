@@ -1,7 +1,8 @@
-torch
-transformers>=4.33
-scipy
-flask
-flask-cors
-sentencepiece
-accelerate
+torch>=2.2
+transformers>=4.39
+accelerate>=0.28
+scipy>=1.10
+soundfile>=0.12
+sentencepiece>=0.2
+flask>=3.0
+flask-cors>=4.0
