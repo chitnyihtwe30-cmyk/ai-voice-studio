@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo ==============================================
 echo AI Voice Studio - LOCAL AI SETUP
- echo ==============================================
+echo ==============================================
 echo.
 
 where python >nul 2>nul
@@ -29,8 +29,8 @@ python -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
 
 echo.
-echo [3/4] Checking Python modules...
-python -c "import torch, transformers, flask, librosa, soundfile; print('Core modules OK'); print('Torch:', torch.__version__); print('CUDA available:', torch.cuda.is_available())"
+echo [3/4] Running full environment check...
+python check_local_ai.py
 if errorlevel 1 goto :fail
 
 echo.
