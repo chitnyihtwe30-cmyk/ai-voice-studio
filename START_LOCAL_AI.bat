@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo ==============================================
 echo AI Voice Studio - LOCAL WEBSITE + AI
- echo ==============================================
+echo ==============================================
 echo.
 
 where python >nul 2>nul
@@ -26,12 +26,21 @@ if not exist "local_server.py" (
   exit /b 1
 )
 
+python check_local_ai.py
+if errorlevel 1 (
+  echo.
+  echo Environment check failed. Run setup_local_ai.bat first.
+  pause
+  exit /b 1
+)
+
+echo.
 echo Starting local AI server...
 echo.
 echo Browser: http://127.0.0.1:8080
- echo TTS:     http://127.0.0.1:8080/api/tts/health
- echo Clone:   http://127.0.0.1:8080/api/clone/health
- echo.
+echo TTS:     http://127.0.0.1:8080/api/tts/health
+echo Clone:   http://127.0.0.1:8080/api/clone/health
+echo.
 echo Keep this window open while using the website.
 echo.
 python local_server.py
