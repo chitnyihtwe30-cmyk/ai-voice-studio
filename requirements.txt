@@ -1,0 +1,7 @@
+torch
+transformers>=4.33
+scipy
+flask
+flask-cors
+sentencepiece
+accelerate
